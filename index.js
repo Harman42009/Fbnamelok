@@ -1,147 +1,144 @@
 const express = require('express');
 const wiegine = require('fca-mafiya');
+const axios = require('axios');
 const app = express();
-const PORT = process.env.PORT || 10000;
+
+// Render Port Binding
+const PORT = process.env.PORT || 10000; 
 
 app.use(express.json());
 
-let activeTasks = new Map();
-let logs = [];
+// Global tasks storage
+let activeTasks = [];
 
-function addLog(msg) {
-    const time = new Date().toLocaleTimeString();
-    logs.unshift(`[${time}] ${msg}`);
-    if (logs.length > 10) logs.pop();
-}
+// ================= KEEP ALIVE LOGIC =================
+// Ye code har 2 minute mein aapke URL ko hit karega taaki Render soye nahi
+setInterval(async () => {
+    try {
+        // Render automatically environment variable deta hai HOSTNAME ke liye
+        const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}.onrender.com`;
+        if (process.env.RENDER_EXTERNAL_HOSTNAME) {
+            await axios.get(url);
+            console.log('⭐ [Alive] Self-ping successful. Server is awake.');
+        }
+    } catch (e) {
+        console.log('Ping status: Active');
+    }
+}, 2 * 60 * 1000); 
+// =====================================================
 
-// --- DASHBOARD UI ---
 app.get('/', (req, res) => {
-    let taskRows = "";
-    activeTasks.forEach((val, key) => {
-        taskRows += `
-            <div style="background:#1c2128; border:1px solid #30363d; padding:10px; margin-top:8px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
-                <div style="text-align:left;">
-                    <b style="color:#58a6ff;">ID: ${key}</b><br>
-                    <small style="color:#8b949e;">Group: ${val.uid} | Name: ${val.name}</small>
-                </div>
-                <button onclick="stopTask('${key}')" style="background:#da3633; color:white; border:none; padding:8px 12px; border-radius:5px; cursor:pointer;">STOP</button>
-            </div>`;
-    });
-
-    let logHtml = logs.map(l => `<div style="border-bottom:1px solid #30363d; padding:5px;">${l}</div>`).join('');
-
     res.send(`
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Deepak Rajput Brand Ultra</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Deepak Rajput Brand - 24/7 Locker</title>
             <style>
-                body { background: #0d1117; color: #c9d1d9; font-family: sans-serif; text-align: center; padding: 20px; }
-                .box { background: #161b22; padding: 20px; border-radius: 12px; border: 1px solid #30363d; display: inline-block; width: 95%; max-width: 450px; }
-                input, textarea { width: 90%; margin: 8px; padding: 12px; background: #0d1117; border: 1px solid #30363d; color: #7ee787; border-radius: 6px; }
-                button { width: 95%; background: #238636; color: white; padding: 14px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-                .terminal { background: #000; color: #0f0; font-family: monospace; padding: 15px; border-radius: 8px; text-align: left; font-size: 12px; border: 1px solid #30363d; height: 120px; overflow-y: auto; margin: 20px auto; max-width: 500px; }
+                body { font-family: 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+                .container { width: 100%; max-width: 600px; background: #161b22; padding: 30px; border-radius: 12px; border: 1px solid #30363d; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+                h1 { text-align: center; color: #58a6ff; margin-bottom: 5px; }
+                .status { font-size: 13px; color: #7ee787; text-align: center; margin-bottom: 25px; }
+                .box { background: #0d1117; padding: 20px; border-radius: 8px; border: 1px solid #30363d; }
+                textarea, input { width: 100%; background: #161b22; color: #7ee787; border: 1px solid #30363d; border-radius: 6px; padding: 12px; margin-bottom: 12px; box-sizing: border-box; outline: none; transition: 0.3s; }
+                textarea:focus, input:focus { border-color: #58a6ff; }
+                button { width: 100%; padding: 14px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; }
+                button:hover { background: #2ea043; }
+                table { width: 100%; border-collapse: collapse; margin-top: 25px; }
+                th, td { padding: 12px; border: 1px solid #30363d; text-align: left; }
+                th { background: #21262d; color: #58a6ff; }
+                .stop-btn { background: #da3633; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
             </style>
         </head>
         <body>
-            <h1 style="color:#58a6ff;">Deepak Rajput Brand Control ✅</h1>
-            <div class="box">
-                <input id="u" placeholder="Group UID">
-                <input id="n" placeholder="Lock Name">
-                <textarea id="c" placeholder="Paste Any Cookie Here"></textarea>
-                <button onclick="start()">START PROTECTION</button>
-            </div>
-            <div class="terminal">${logHtml || "System Ready..."}</div>
-            <div style="max-width:500px; margin:auto;">
-                <h3 style="text-align:left;">🛡️ Active Protections</h3>
-                <div id="taskList">${taskRows || "<p style='color:#8b949e;'>No active tasks</p>"}</div>
+            <div class="container">
+                <h1>Deepak Rajput Brand</h1>
+                <div class="status">● System Status: 24/7 Active Mode</div>
+                <div class="box">
+                    <textarea id="cookie" placeholder="Paste Your Facebook Cookie..."></textarea>
+                    <input type="text" id="uid" placeholder="Group/Thread UID">
+                    <input type="text" id="name" placeholder="Name to Lock">
+                    <button onclick="addTask()">ACTIVATE PROTECTION</button>
+                </div>
+                <h3>Active Monitoring</h3>
+                <table>
+                    <thead><tr><th>ID</th><th>Target UID</th><th>Locked Name</th><th>Action</th></tr></thead>
+                    <tbody id="taskTable"></tbody>
+                </table>
             </div>
             <script>
-                async function start(){
-                    const u = document.getElementById('u').value;
-                    const n = document.getElementById('n').value;
-                    const c = document.getElementById('c').value;
-                    if(!u || !n || !c) return alert("Details bharo!");
-                    const res = await fetch('/add', {
-                        method:'POST',
-                        headers:{'Content-Type':'application/json'},
-                        body: JSON.stringify({uid:u, name:n, cookie:c})
+                async function addTask() {
+                    const cookie = document.getElementById('cookie').value.trim();
+                    const uid = document.getElementById('uid').value.trim();
+                    const name = document.getElementById('name').value.trim();
+                    if(!cookie || !uid || !name) return alert("Bhai, saari details bhariyo!");
+                    
+                    const res = await fetch('/add-task', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ cookie, uid, name })
                     });
                     const data = await res.json();
-                    alert(data.msg);
-                    location.reload();
+                    alert(data.message);
+                    load();
                 }
-                async function stopTask(id){
-                    await fetch('/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id:id}) });
-                    location.reload();
+                async function load() {
+                    const res = await fetch('/list-tasks');
+                    const tasks = await res.json();
+                    document.getElementById('taskTable').innerHTML = tasks.map(t => \`
+                        <tr>
+                            <td style="color:#ffa657">#\${t.id}</td>
+                            <td>\${t.uid}</td>
+                            <td>\${t.name}</td>
+                            <td><button class="stop-btn" onclick="stopTask('\${t.id}')">STOP</button></td>
+                        </tr>\`).join('');
                 }
+                async function stopTask(id) {
+                    await fetch('/stop-task', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id }) });
+                    load();
+                }
+                setInterval(load, 5000); load();
             </script>
         </body>
         </html>
-    `);
+    \`);
 });
 
-// --- API LOGIC ---
-app.post('/add', (req, res) => {
-    let { uid, name, cookie } = req.body;
+app.post('/add-task', (req, res) => {
+    const { cookie, uid, name } = req.body;
     const taskId = Math.floor(1000 + Math.random() * 9000).toString();
-    
-    let appState;
-    try {
-        // Universal Parser: Handles JSON and Raw String
-        if (cookie.trim().startsWith('[')) {
-            appState = JSON.parse(cookie);
-        } else {
-            appState = cookie.split(';').map(item => {
-                const parts = item.split('=');
-                if (parts.length >= 2) {
-                    return {
-                        key: parts[0].trim(),
-                        value: parts.slice(1).join('=').trim(),
-                        domain: "facebook.com",
-                        path: "/",
-                        hostOnly: false,
-                        creation: new Date().toISOString(),
-                        lastAccessed: new Date().toISOString()
-                    };
-                }
-                return null;
-            }).filter(Boolean);
-        }
 
-        if (!appState || appState.length === 0) throw new Error("Format error");
+    wiegine.login(cookie, { logLevel: 'silent' }, (err, api) => {
+        if (err || !api) return res.json({ message: "Login Fail! Cookie check karo." });
+        
+        // Pehli baar set karna
+        api.setTitle(name, uid);
 
-        wiegine({ appState }, { logLevel: 'silent', forceLogin: true }, (err, api) => {
-            if(err) {
-                addLog(`❌ Task #${taskId} Login Failed! Error: ${err.error || "Check Cookie"}`);
-                return;
+        // Name badalte hi wapas wahi set karne ka listener
+        const listener = api.listenMqtt((err, event) => {
+            if (event?.type === "event" && event.logMessageType === "log:thread-name" && event.threadID === uid) {
+                console.log(\`[Deepak Rajput Brand] Reverting name in \${uid}\`);
+                api.setTitle(name, uid);
             }
-            api.setTitle(name, uid);
-            const stop = api.listenMqtt((err, event) => {
-                if(event?.logMessageType === "log:thread-name" && event.threadID === uid){
-                    addLog(`🔄 Task #${taskId}: Reset Name`);
-                    setTimeout(() => api.setTitle(name, uid), 2500);
-                }
-            });
-            activeTasks.set(taskId, { uid, name, stop });
-            addLog(`✅ Task #${taskId} Started!`);
         });
-        res.json({ msg: "Task #" + taskId + " Started!", taskId });
-    } catch(e) {
-        res.json({ msg: "Error: Cookie ka format sahi nahi hai!" });
-    }
+
+        activeTasks.push({ id: taskId, uid, name, api, listener });
+        res.json({ message: "Task #" + taskId + " Started Successfully!" });
+    });
 });
 
-app.post('/stop', (req, res) => {
+app.get('/list-tasks', (req, res) => {
+    res.json(activeTasks.map(t => ({ id: t.id, uid: t.uid, name: t.name })));
+});
+
+app.post('/stop-task', (req, res) => {
     const { id } = req.body;
-    if (activeTasks.has(id)) {
-        const task = activeTasks.get(id);
-        if (typeof task.stop === 'function') task.stop();
-        activeTasks.delete(id);
-        addLog(`🛑 Task #${id} Stopped`);
+    const index = activeTasks.findIndex(t => t.id === id);
+    if (index !== -1) {
+        if (activeTasks[index].listener) activeTasks[index].listener();
+        activeTasks.splice(index, 1);
+        res.json({ message: "Task #" + id + " stopped." });
     }
-    res.json({ msg: "OK" });
 });
 
-app.listen(PORT, '0.0.0.0', () => console.log("Server Started"));
+// Render requirement: 0.0.0.0 par bind karna
+app.listen(PORT, '0.0.0.0', () => console.log('🔥 Server running on Port ' + PORT));
