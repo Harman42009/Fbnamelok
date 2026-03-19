@@ -1,18 +1,17 @@
 {
-  "name": "deepak-rajput-brand-manager",
-  "version": "2.0.0",
-  "description": "Multi-Task FB Name Locker with Live Logs",
+  "name": "deepak-rajput-brand-247",
+  "version": "1.0.0",
+  "description": "24/7 Multi-Tasking Locker for Deepak Rajput Brand",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "fca-mafiya": "latest"
+    "express": "^4.19.2",
+    "fca-mafiya": "latest",
+    "axios": "^1.6.0"
   },
   "engines": {
     "node": "18.x"
-  },
-  "author": "Deepak Rajput Brand",
-  "license": "ISC"
+  }
 }
