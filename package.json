@@ -1,17 +1,18 @@
 {
-  "name": "deepak-rajput-brand-ultra",
-  "version": "1.8.0",
-  "description": "FB Name Locker with MongoDB Auto-Resume",
+  "name": "deepak-rajput-brand-manager",
+  "version": "2.0.0",
+  "description": "Multi-Task FB Name Locker with Live Logs",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "fca-mafiya": "latest",
-    "mongoose": "^8.0.0"
+    "fca-mafiya": "latest"
   },
   "engines": {
     "node": "18.x"
-  }
+  },
+  "author": "Deepak Rajput Brand",
+  "license": "ISC"
 }
