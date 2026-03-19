@@ -1,134 +1,103 @@
-const fs = require('fs');
-const path = require('path');
 const express = require('express');
 const wiegine = require('fca-mafiya');
-const WebSocket = require('ws');
-const { v4: uuidv4 } = require('uuid');
-
+const axios = require('axios');
 const app = express();
-// Render ke liye 0.0.0.0 aur Port 10000 zaroori hai
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 10000; 
 
-const tasks = new Map();
-let startTime = Date.now();
-const monitorData = { activeTasks: 0, totalSent: 0 };
+app.use(express.json());
+let activeTasks = [];
 
-/* --- CLASSES --- */
-class TaskConfig {
-  constructor(delay, cookies) {
-    this.delay = parseInt(delay) || 10;
-    this.running = true;
-    this.cookies = cookies;
-  }
-}
+// Keep Alive Logic
+setInterval(async () => {
+    try {
+        const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}.onrender.com`;
+        if (process.env.RENDER_EXTERNAL_HOSTNAME) await axios.get(url);
+    } catch (e) {}
+}, 2 * 60 * 1000);
 
-class TaskMessageData {
-  constructor(threadID, messages, hatersName, lastName) {
-    this.threadID = threadID;
-    this.messages = messages;
-    this.hatersName = hatersName;
-    this.lastName = lastName;
-    this.currentIndex = 0;
-    this.loopCount = 0;
-  }
-}
-
-class RawSessionManager {
-  constructor(ws, taskId, totalSessions) {
-    this.ws = ws;
-    this.taskId = taskId;
-    this.totalSessions = totalSessions;
-    this.sessions = new Map();
-    this.unhealthyCount = 0;
-    this.unhealthyThreshold = Math.max(1, Math.floor(totalSessions * 0.75));
-  }
-
-  log(msg) {
-    const text = `[Task ${this.taskId}] ${msg}`;
-    console.log(text);
-    if (this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'log', message: text }));
-    }
-  }
-
-  async createRawSession(cookie, index, threadID) {
-    return new Promise((resolve) => {
-      wiegine.login(cookie, { logLevel: 'silent', forceLogin: true }, (err, api) => {
-        if (err || !api) {
-          this.unhealthyCount++;
-          resolve(null);
-        } else {
-          this.sessions.set(index, { api, healthy: true });
-          resolve(api);
-        }
-      });
-    });
-  }
-}
-
-/* --- LOGIC --- */
-async function runTaskLoop(taskId) {
-  const task = tasks.get(taskId);
-  if (!task || !task.config.running) return;
-  
-  const msg = `${task.messageData.messages[task.messageData.currentIndex]} - ${taskId.slice(0,4)}`;
-  
-  // Pehli healthy session se message bhejna
-  const session = Array.from(task.rawManager.sessions.values()).find(s => s.healthy);
-  if (session) {
-    session.api.sendMessage(msg, task.messageData.threadID, (err) => {
-      if (!err) {
-        monitorData.totalSent++;
-        task.messageData.currentIndex = (task.messageData.currentIndex + 1) % task.messageData.messages.length;
-      }
-    });
-  }
-}
-
-/* --- SERVER & ROUTES --- */
+// HTML Dashboard Code (Ab ye file ki zaroorat nahi padne dega)
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Deepak Rajput Brand - 24/7</title>
+            <style>
+                body { font-family: sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+                .container { width: 100%; max-width: 500px; background: #161b22; padding: 25px; border-radius: 12px; border: 1px solid #30363d; }
+                h1 { text-align: center; color: #58a6ff; }
+                textarea, input { width: 100%; background: #0d1117; color: #7ee787; border: 1px solid #30363d; border-radius: 6px; padding: 12px; margin-bottom: 10px; box-sizing: border-box; }
+                button { width: 100%; padding: 12px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { padding: 10px; border: 1px solid #30363d; text-align: left; font-size: 13px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Deepak Rajput Brand</h1>
+                <textarea id="cookie" placeholder="Paste Cookie..."></textarea>
+                <input type="text" id="uid" placeholder="Group UID">
+                <input type="text" id="name" placeholder="Name to Lock">
+                <button onclick="addTask()">START LOCKER</button>
+                <table>
+                    <thead><tr><th>ID</th><th>UID</th><th>Name</th><th>Action</th></tr></thead>
+                    <tbody id="taskTable"></tbody>
+                </table>
+            </div>
+            <script>
+                async function addTask() {
+                    const cookie = document.getElementById('cookie').value;
+                    const uid = document.getElementById('uid').value;
+                    const name = document.getElementById('name').value;
+                    const res = await fetch('/add-task', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ cookie, uid, name })
+                    });
+                    const d = await res.json(); alert(d.message); load();
+                }
+                async function load() {
+                    const res = await fetch('/list-tasks');
+                    const tasks = await res.json();
+                    document.getElementById('taskTable').innerHTML = tasks.map(t => \`
+                        <tr><td>#\${t.id}</td><td>\${t.uid}</td><td>\${t.name}</td>
+                        <td><button style="background:red;border:none;color:white;cursor:pointer" onclick="stopTask('\${t.id}')">STOP</button></td></tr>\`).join('');
+                }
+                async function stopTask(id) {
+                    await fetch('/stop-task', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id }) });
+                    load();
+                }
+                setInterval(load, 5000); load();
+            </script>
+        </body>
+        </html>
+    `);
 });
 
-// Render ko "Alive" rakhne ke liye host 0.0.0.0 zaroori hai
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔥 Server is live on port ${PORT}`);
+app.post('/add-task', (req, res) => {
+    const { cookie, uid, name } = req.body;
+    const taskId = Math.floor(1000 + Math.random() * 9000).toString();
+    wiegine.login(cookie, { logLevel: 'silent' }, (err, api) => {
+        if (err || !api) return res.json({ message: "Login Fail!" });
+        api.setTitle(name, uid);
+        const listener = api.listenMqtt((err, event) => {
+            if (event?.type === "event" && event.logMessageType === "log:thread-name" && event.threadID === uid) api.setTitle(name, uid);
+        });
+        activeTasks.push({ id: taskId, uid, name, api, listener });
+        res.json({ message: "Task #" + taskId + " Active!" });
+    });
 });
 
-/* --- WEBSOCKET --- */
-const wss = new WebSocket.Server({ server, path: '/ws' });
+app.get('/list-tasks', (req, res) => res.json(activeTasks.map(t => ({ id: t.id, uid: t.uid, name: t.name }))));
 
-wss.on('connection', (ws) => {
-  ws.on('message', async (msg) => {
-    let data = JSON.parse(msg);
-    if (data.type === 'start') {
-      const taskId = uuidv4();
-      const cookies = data.cookieContent.split('\n').filter(Boolean);
-      const messages = data.messageContent.split('\n').filter(Boolean);
-      
-      const task = {
-        config: new TaskConfig(data.delay, cookies),
-        messageData: new TaskMessageData(data.threadID, messages, [], []),
-        rawManager: new RawSessionManager(ws, taskId, cookies.length),
-        intervalId: null
-      };
-
-      for(let i=0; i<cookies.length; i++) {
-        await task.rawManager.createRawSession(cookies[i], i, data.threadID);
-      }
-
-      task.intervalId = setInterval(() => runTaskLoop(taskId), task.config.delay * 1000);
-      tasks.set(taskId, task);
-      ws.send(JSON.stringify({ type: 'task_started', taskId }));
+app.post('/stop-task', (req, res) => {
+    const { id } = req.body;
+    const i = activeTasks.findIndex(t => t.id === id);
+    if (i !== -1) {
+        if (activeTasks[i].listener) activeTasks[i].listener();
+        activeTasks.splice(i, 1);
+        res.json({ message: "Stopped" });
     }
-    
-    if (data.type === 'monitor') {
-      ws.send(JSON.stringify({
-        type: 'monitor_data',
-        uptime: Math.floor((Date.now() - startTime) / 1000),
-        activeTasks: tasks.size,
-        totalSent: monitorData.totalSent
-      }));
-    }
-  });
 });
+
+app.listen(PORT, '0.0.0.0', () => console.log('Server is online!'));
