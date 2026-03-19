@@ -1,110 +1,72 @@
 const express = require('express');
 const wiegine = require('fca-mafiya');
+const mongoose = require('mongoose');
 const app = express();
-const PORT = process.env.PORT || 3000;
+
+// Render ke liye PORT 10000 aur host 0.0.0.0 zaroori hai
+const PORT = process.env.PORT || 10000; 
 
 app.use(express.json());
 
-let activeTasks = [];
+// --- MONGODB CONNECTION ---
+// Yahan apni asli MongoDB link dalein
+const MONGO_URI = "mongodb+srv://user:pass@cluster.mongodb.net/myDatabase"; 
 
-app.get('/', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Deepak Rajput Brand - Multi Tasker</title>
-            <style>
-                body { font-family: sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-                .container { width: 100%; max-width: 600px; background: #161b22; padding: 25px; border-radius: 12px; border: 1px solid #30363d; }
-                h1 { text-align: center; color: #58a6ff; }
-                input, textarea { width: 100%; background: #0d1117; color: #7ee787; border: 1px solid #30363d; border-radius: 6px; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
-                button { width: 100%; padding: 12px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th, td { padding: 10px; border: 1px solid #30363d; text-align: left; font-size: 13px; }
-                .btn-stop { background: #da3633; padding: 5px 10px; border-radius: 4px; font-size: 11px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>Deepak Rajput Brand</h1>
-                <textarea id="cookie" placeholder="Paste Cookie..."></textarea>
-                <input type="text" id="uid" placeholder="Group UID...">
-                <input type="text" id="name" placeholder="Name to Lock...">
-                <button onclick="addTask()">START LOCK</button>
-                <table>
-                    <thead><tr><th>ID</th><th>UID</th><th>Name</th><th>Action</th></tr></thead>
-                    <tbody id="taskTable"></tbody>
-                </table>
-            </div>
-            <script>
-                async function addTask() {
-                    const cookie = document.getElementById('cookie').value;
-                    const uid = document.getElementById('uid').value;
-                    const name = document.getElementById('name').value;
-                    const res = await fetch('/add', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ cookie, uid, name })
-                    });
-                    const data = await res.json();
-                    alert(data.message);
-                    load();
-                }
-                async function load() {
-                    const res = await fetch('/list');
-                    const tasks = await res.json();
-                    const table = document.getElementById('taskTable');
-                    table.innerHTML = tasks.map(t => \`
-                        <tr>
-                            <td>#\${t.id}</td>
-                            <td>\${t.uid}</td>
-                            <td>\${t.name}</td>
-                            <td><button class="btn-stop" onclick="stop('\${t.id}')">STOP</button></td>
-                        </tr>\`).join('');
-                }
-                async function stop(id) {
-                    await fetch('/stop', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ id })
-                    });
-                    load();
-                }
-                setInterval(load, 5000); load();
-            </script>
-        </body>
-        </html>
-    `);
+mongoose.connect(MONGO_URI)
+  .then(() => console.log("☁️ Connected to MongoDB Cloud"))
+  .catch(err => console.log("❌ DB Connection Error:", err.message));
+
+const taskSchema = new mongoose.Schema({
+    id: String, cookie: String, uid: String, name: String
 });
+const Task = mongoose.model('Task', taskSchema);
+let activeListeners = new Map();
 
-app.post('/add', (req, res) => {
-    const { cookie, uid, name } = req.body;
-    const taskId = Math.floor(1000 + Math.random() * 9000).toString();
-    wiegine.login(cookie, { logLevel: 'silent' }, (err, api) => {
-        if (err || !api) return res.json({ message: "Login Fail!" });
-        api.setTitle(name, uid);
-        const stopListen = api.listenMqtt((err, event) => {
-            if (event?.type === "event" && event.logMessageType === "log:thread-name" && event.threadID === uid) {
-                api.setTitle(name, uid);
+// --- ENGINE ---
+async function startProtection(task) {
+    wiegine.login(task.cookie, { logLevel: 'silent' }, (err, api) => {
+        if (err || !api) return console.log(`[Task ${task.id}] Login Fail`);
+
+        api.setTitle(task.name, task.uid);
+        const stop = api.listenMqtt((err, event) => {
+            if (event?.type === "event" && event.logMessageType === "log:thread-name" && event.threadID === task.uid) {
+                api.setTitle(task.name, task.uid);
             }
         });
-        activeTasks.push({ id: taskId, uid, name, api, stopListen });
-        res.json({ message: "Task #" + taskId + " Started!" });
+        activeListeners.set(task.id, stop);
     });
+}
+
+// Auto-Restart Logic
+async function resumeTasks() {
+    try {
+        const tasks = await Task.find({});
+        tasks.forEach(t => startProtection(t));
+    } catch (e) { console.log("Error resuming tasks"); }
+}
+resumeTasks();
+
+// Dashboard Route
+app.get('/', (req, res) => {
+    res.send(`<h1>Deepak Rajput Brand Ultra - Server is Online ✅</h1>`);
 });
 
-app.get('/list', (req, res) => {
-    res.json(activeTasks.map(t => ({ id: t.id, uid: t.uid, name: t.name })));
+// APIs for Dashboard
+app.post('/add-task', async (req, res) => {
+    const { cookie, uid, name } = req.body;
+    const id = Math.floor(1000 + Math.random() * 9000).toString();
+    const newTask = new Task({ id, cookie, uid, name });
+    await newTask.save();
+    startProtection(newTask);
+    res.json({ message: "Task #" + id + " Active & Saved!" });
 });
 
-app.post('/stop', (req, res) => {
-    const { id } = req.body;
-    const idx = activeTasks.findIndex(t => t.id === id);
-    if (idx !== -1) {
-        if (activeTasks[idx].stopListen) activeTasks[idx].stopListen();
-        activeTasks.splice(idx, 1);
-        res.json({ message: "Stopped" });
-    }
+app.get('/list-tasks', async (req, res) => {
+    const tasks = await Task.find({});
+    res.json(tasks);
 });
 
-app.listen(PORT, () => console.log('Bot is running on port ' + PORT));
+// Render ko "Port Scan Timeout" se bachane ke liye 0.0.0.0 par bind karein
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🔥 Server Live on Port ${PORT}`);
+});
