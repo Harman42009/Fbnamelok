@@ -1,7 +1,7 @@
 {
   "name": "deepak-rajput-brand-locker",
   "version": "1.0.0",
-  "description": "Silent Group Name Locker",
+  "description": "Multi-Task Name Locker",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
